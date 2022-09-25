@@ -7,7 +7,5 @@ Sense css module language server
 ## Features
 
 - [x] class name autocomplete
-- [ ] hover document
-- [ ] goto definition
-- [ ] goto reference
-- [ ] rename
+- [x] hover document
+- [x] goto definition

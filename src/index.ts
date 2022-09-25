@@ -6,15 +6,19 @@ import {
   TextDocumentSyncKind,
   InitializeResult,
   CompletionItemKind,
+  Hover,
+  Location,
 } from 'vscode-languageserver/node';
 import * as Uri from 'vscode-uri';
 
 import { setting } from './setting';
 import { cssModules } from './documents';
-import { cssExtName, cssImportStatement as cssImportStr, xsxExtName } from './constant';
+import { cssExtName, cssImportStatement, xsxExtName } from './constant';
 import { dirname, join, relative } from 'path';
 import { existsSync, readFileSync } from 'fs';
 import { connection, documents, getTextDocument } from './lsp';
+import { getTokenAt as getNodeAt, isClassNode } from './position';
+import { getImportStatements, getWordAtPosition } from './utils';
 
 let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
@@ -34,6 +38,8 @@ connection.onInitialize((params: InitializeParams) => {
       completionProvider: {
         resolveProvider: true,
       },
+      hoverProvider: true,
+      definitionProvider: true,
     },
   };
   if (hasWorkspaceFolderCapability) {
@@ -85,24 +91,12 @@ documents.onDidChangeContent((change) => {
   if (xsxExtName.test(extname)) {
     const doc = documents.get(change.document.uri);
     if (doc) {
-      const stylePaths: string[] = [];
       const filePath = uri.fsPath;
-      const lines = doc.getText().split('\n');
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const m = line.match(cssImportStr);
-        if (!m || !m[2]) {
-          continue;
-        }
-        const importStr = m[2];
-        const fp = join(dirname(filePath), importStr);
-        if (!cssModules.classNames.has(fp) && existsSync(fp)) {
-          stylePaths.push(fp);
-        }
-      }
+      const stylePaths = getImportStatements(filePath, doc.getText());
       stylePaths.forEach((stylePath) => {
-        cssModules.resolveClassNames(stylePath, readFileSync(stylePath, { encoding: 'utf-8' }));
+        if (!cssModules.classNames.has(stylePath)) {
+          cssModules.resolveClassNames(stylePath, readFileSync(stylePath, { encoding: 'utf-8' }));
+        }
       });
     }
   }
@@ -126,13 +120,20 @@ connection.onCompletion((textDocumentPosition: TextDocumentPositionParams): Comp
     return [];
   }
 
+  // invalid position
+  const content = doc.getText();
+  const node = getNodeAt(uri.fsPath, content, doc.offsetAt(textDocumentPosition.position));
+  if (!node || !isClassNode(node)) {
+    return [];
+  }
+
   const stylePaths: string[] = [];
   const filePath = uri.fsPath;
   const lines = doc.getText().split('\n');
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const m = line.match(cssImportStr);
+    const m = line.match(cssImportStatement);
     if (!m || !m[2]) {
       continue;
     }
@@ -201,6 +202,108 @@ connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
       .join('\n'),
   };
   return item;
+});
+
+connection.onHover((params) => {
+  const uri = Uri.URI.parse(params.textDocument.uri);
+  const extname = Uri.Utils.extname(uri);
+  if (!xsxExtName.test(extname)) {
+    return;
+  }
+
+  const doc = documents.get(params.textDocument.uri);
+  if (!doc) {
+    return;
+  }
+
+  const content = doc.getText();
+  const node = getNodeAt(Uri.URI.parse(params.textDocument.uri).fsPath, content, doc.offsetAt(params.position));
+  if (node && isClassNode(node)) {
+    const word = getWordAtPosition(doc, params.position);
+    const stylePaths = getImportStatements(uri.fsPath, doc.getText());
+    const values: string[] = [];
+
+    stylePaths.forEach((stylePath) => {
+      const styleUri = Uri.URI.file(stylePath);
+      const styleDoc = getTextDocument(styleUri.toString());
+      if (!styleDoc) {
+        return;
+      }
+      const data = cssModules.classNames.get(stylePath);
+      const ranges = data?.[word];
+      if (ranges) {
+        values.push(
+          ...ranges.map((range) => {
+            return [
+              `\`\`\`${Uri.Utils.extname(styleUri).slice(1).trim()}`,
+              styleDoc.getText(range[0], range[1] + 1),
+              '```',
+            ].join('\n');
+          }),
+        );
+      }
+    });
+
+    if (values.length) {
+      return {
+        contents: {
+          kind: 'markdown',
+          value: values.join('\n'),
+        },
+      } as Hover;
+    }
+  }
+  return undefined;
+});
+
+connection.onDefinition((params) => {
+  const uri = Uri.URI.parse(params.textDocument.uri);
+  const extname = Uri.Utils.extname(uri);
+  if (!xsxExtName.test(extname)) {
+    return;
+  }
+
+  const doc = documents.get(params.textDocument.uri);
+  if (!doc) {
+    return;
+  }
+
+  const content = doc.getText();
+  const node = getNodeAt(Uri.URI.parse(params.textDocument.uri).fsPath, content, doc.offsetAt(params.position));
+  if (node && isClassNode(node)) {
+    const word = getWordAtPosition(doc, params.position);
+    const stylePaths = getImportStatements(uri.fsPath, doc.getText());
+    const res: Location[] = [];
+
+    stylePaths.forEach((stylePath) => {
+      const styleUri = Uri.URI.file(stylePath);
+      const styleDoc = getTextDocument(styleUri.toString());
+      if (!styleDoc) {
+        return;
+      }
+      const data = cssModules.classNames.get(stylePath);
+      const ranges = data?.[word];
+      if (ranges) {
+        ranges.forEach((range) => {
+          const start = styleDoc.positionAt(range[0]);
+          const end = styleDoc.positionAt(range[1]);
+          console.log(`${JSON.stringify(start)}-${JSON.stringify(end)}`);
+          if (start && end) {
+            res.push({
+              range: {
+                start,
+                end,
+              },
+              uri: styleUri.toString(),
+            });
+          }
+        });
+      }
+    });
+
+    return res;
+  }
+  return [];
 });
 
 // Make the text document manager listen on the connection
