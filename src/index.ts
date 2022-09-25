@@ -70,7 +70,7 @@ connection.onInitialized(() => {
 });
 
 connection.onDidChangeConfiguration((change) => {
-  const globalSettings = change.settings?.['sense-css-module'];
+  const globalSettings = change.settings?.['sense-css-module-server'];
   if (globalSettings) {
     setting.setLSP(globalSettings);
   }

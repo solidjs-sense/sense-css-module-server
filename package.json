@@ -1,7 +1,7 @@
 {
-  "name": "coc-sense-css-module",
+  "name": "sense-css-module-server",
   "version": "0.0.1",
-  "description": "Sense css module support for (Neo)vim",
+  "description": "Sense css module server",
   "author": "iamcco <ooiss@qq.com>",
   "license": "MIT",
   "main": "out/index.js",
@@ -20,8 +20,9 @@
     "prepare": "husky install && npm run clean && npm run build"
   },
   "bin": {
-    "sense-css-module": "./bin/index.js"
+    "sense-css-module-server": "./bin/index.js"
   },
+  "files": ["./out"],
   "devDependencies": {
     "@types/node": "^18.7.19",
     "@typescript-eslint/eslint-plugin": "^5.38.0",
