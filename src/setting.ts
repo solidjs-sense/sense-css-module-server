@@ -9,7 +9,7 @@ export const setting: {
   workspaceFolder?: WorkspaceFolder;
   lsp: LSPSetting;
   setLSP: (lsp: LSPSetting) => void;
-  setWorkspaceFolder: (folder: WorkspaceFolder) => void;
+  setWorkspaceFolder: (folder?: WorkspaceFolder) => void;
 } = {
   lsp: {
     globalStyleFiles: [],
@@ -17,7 +17,7 @@ export const setting: {
   setLSP(lsp: LSPSetting) {
     this.lsp = lsp;
   },
-  setWorkspaceFolder(folder: WorkspaceFolder) {
+  setWorkspaceFolder(folder?: WorkspaceFolder) {
     this.workspaceFolder = folder;
   },
 };

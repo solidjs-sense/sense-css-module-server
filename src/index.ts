@@ -59,9 +59,8 @@ connection.onInitialized(() => {
   }
   const getWorkspaceFolders = async () => {
     const workspaceFolders = await connection.workspace.getWorkspaceFolders();
-    if (workspaceFolders?.[0]) {
-      setting.setWorkspaceFolder(workspaceFolders[0]);
-    }
+    const workspaceFolder = workspaceFolders?.[workspaceFolders.length - 1];
+    setting.setWorkspaceFolder(workspaceFolder);
   };
   if (hasWorkspaceFolderCapability) {
     connection.workspace.onDidChangeWorkspaceFolders(getWorkspaceFolders);
@@ -71,7 +70,7 @@ connection.onInitialized(() => {
 });
 
 connection.onDidChangeConfiguration((change) => {
-  const globalSettings = change.settings['sense-css-module'];
+  const globalSettings = change.settings?.['sense-css-module'];
   if (globalSettings) {
     setting.setLSP(globalSettings);
   }
@@ -287,7 +286,6 @@ connection.onDefinition((params) => {
         ranges.forEach((range) => {
           const start = styleDoc.positionAt(range[0]);
           const end = styleDoc.positionAt(range[1]);
-          console.log(`${JSON.stringify(start)}-${JSON.stringify(end)}`);
           if (start && end) {
             res.push({
               range: {
