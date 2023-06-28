@@ -4,10 +4,16 @@ import path from 'path';
 import { getCssModulesNames } from './postcss';
 import * as Uri from 'vscode-uri';
 import { setting } from './setting';
+import { cssExtName } from './constant';
 
 class CssModules {
   globalClassNames = new Map<string, Record<string, [number, number][]>>();
   classNames = new Map<string, Record<string, [number, number][]>>();
+
+  async resolvesGlobalClassName(filePath: string, code: string) {
+    const res = await getCssModulesNames(filePath, code);
+    this.globalClassNames.set(filePath, res);
+  }
 
   async resolvesGlobalClassNames() {
     const resolveStyleByFilePath = async (parentDir: string, filePath: string) => {
@@ -23,7 +29,7 @@ class CssModules {
             await resolveStyleByFilePath(absPath, filePath);
           }
         }
-      } else if (st.isFile() && /\.(css|less|scss)$/.test(absPath)) {
+      } else if (st.isFile() && cssExtName.test(absPath)) {
         const res = await getCssModulesNames(absPath, readFileSync(absPath, { encoding: 'utf-8' }));
         this.globalClassNames.set(absPath, res);
       }

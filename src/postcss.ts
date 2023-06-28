@@ -1,4 +1,4 @@
-import postcss from 'postcss';
+import postcss, { Result } from 'postcss';
 import postLess from 'postcss-less';
 import postScss from 'postcss-scss';
 import postModules from 'postcss-modules';
@@ -20,17 +20,27 @@ export const getCssModulesNames = async (
   let json: Record<string, string> = {};
   const syntax = getSyntax(filePath);
 
-  const res = await postcss([
-    postModules({
-      getJSON(_cssFilename, outputJson) {
-        json = outputJson;
-      },
-    }),
-  ]).process(code, {
-    map: false,
-    from: filePath,
-    syntax,
-  });
+  let res: Result | undefined;
+
+  try {
+    res = await postcss([
+      postModules({
+        getJSON(_cssFilename, outputJson) {
+          json = outputJson;
+        },
+      }),
+    ]).process(code, {
+      map: false,
+      from: filePath,
+      syntax,
+    });
+  } catch (error) {
+    //
+  }
+
+  if (!res) {
+    return {};
+  }
 
   const valueKey: Record<
     string,

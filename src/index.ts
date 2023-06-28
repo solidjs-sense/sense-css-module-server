@@ -105,7 +105,15 @@ documents.onDidChangeContent((change) => {
   }
 
   if (cssExtName.test(extname)) {
-    cssModules.resolveClassNames(Uri.URI.parse(change.document.uri).fsPath, change.document.getText());
+    const fsPath = Uri.URI.parse(change.document.uri).fsPath;
+
+    // locale file
+    cssModules.resolveClassNames(fsPath, change.document.getText());
+
+    // global file
+    if (cssModules.globalClassNames.has(fsPath)) {
+      cssModules.resolvesGlobalClassName(fsPath, change.document.getText());
+    }
   }
 });
 
