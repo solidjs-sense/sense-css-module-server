@@ -11,7 +11,7 @@ import {
 } from 'vscode-languageserver/node';
 import * as Uri from 'vscode-uri';
 
-import { setting } from './setting';
+import { globalStyleFilesKey, setting } from './setting';
 import { cssModules } from './documents';
 import { cssExtName, cssImportStatement, xsxExtName } from './constant';
 import { dirname, join, relative } from 'path';
@@ -25,6 +25,10 @@ let hasWorkspaceFolderCapability = false;
 
 connection.onInitialize((params: InitializeParams) => {
   const capabilities = params.capabilities;
+
+  if (params.initializationOptions?.[globalStyleFilesKey]) {
+    setting.setLSP({ globalStyleFiles: params.initializationOptions[globalStyleFilesKey] });
+  }
 
   // Does the client support the `workspace/configuration` request?
   // If not, we fall back using global settings.
@@ -70,9 +74,9 @@ connection.onInitialized(() => {
 });
 
 connection.onDidChangeConfiguration((change) => {
-  const globalSettings = change.settings?.['sense-css-module-server'];
-  if (globalSettings) {
-    setting.setLSP(globalSettings);
+  const globalStyleFiles = change.settings[globalStyleFilesKey];
+  if (globalStyleFiles) {
+    setting.setLSP({ globalStyleFiles });
   }
 });
 
@@ -147,7 +151,7 @@ connection.onCompletion((textDocumentPosition: TextDocumentPositionParams): Comp
     return [];
   }
 
-  return stylePaths.reduce<CompletionItem[]>((acc, stylePath) => {
+  const res = stylePaths.reduce<CompletionItem[]>((acc, stylePath) => {
     const modules = cssModules.classNames.get(stylePath);
     if (modules) {
       return acc.concat(
@@ -170,6 +174,32 @@ connection.onCompletion((textDocumentPosition: TextDocumentPositionParams): Comp
     }
     return acc;
   }, []);
+
+  if (cssModules.globalClassNames.size > 0) {
+    for (const stylePath of cssModules.globalClassNames.keys()) {
+      const modules = cssModules.globalClassNames.get(stylePath);
+      if (!modules) {
+        continue;
+      }
+      Object.keys(modules).forEach((name) => {
+        res.push({
+          label: name,
+          insertText: name,
+          kind: CompletionItemKind.Text,
+          data: {
+            relativePath: relative(dirname(filePath), stylePath),
+            uri: Uri.URI.from({
+              scheme: 'file',
+              path: stylePath,
+            }).toString(),
+            ranges: modules[name],
+          },
+        });
+      });
+    }
+  }
+
+  return res;
 });
 
 // This handler resolves additional information for the item selected in
@@ -222,18 +252,21 @@ connection.onHover((params) => {
     const stylePaths = getImportStatements(uri.fsPath, doc.getText());
     const values: string[] = [];
 
-    stylePaths.forEach((stylePath) => {
+    const resolveHover = (stylePath, data: Record<string, [number, number][]>) => {
       const styleUri = Uri.URI.file(stylePath);
       const styleDoc = getTextDocument(styleUri.toString());
       if (!styleDoc) {
         return;
       }
-      const data = cssModules.classNames.get(stylePath);
       const ranges = data?.[word];
       if (ranges) {
         values.push(
           ...ranges.map((range) => {
             return [
+              `\`\`\`text`,
+              `${relative(dirname(uri.fsPath), stylePath)}`,
+              `\`\`\``,
+              '',
               `\`\`\`${Uri.Utils.extname(styleUri).slice(1).trim()}`,
               styleDoc.getText(range[0], range[1] + 1),
               '```',
@@ -241,7 +274,25 @@ connection.onHover((params) => {
           }),
         );
       }
+    };
+
+    // locale style
+    stylePaths.forEach((stylePath) => {
+      const data = cssModules.classNames.get(stylePath);
+      if (!data) {
+        return;
+      }
+      resolveHover(stylePath, data);
     });
+
+    // global style
+    for (const stylePath of cssModules.globalClassNames.keys()) {
+      const data = cssModules.globalClassNames.get(stylePath);
+      if (!data) {
+        continue;
+      }
+      resolveHover(stylePath, data);
+    }
 
     if (values.length) {
       return {
@@ -274,14 +325,13 @@ connection.onDefinition((params) => {
     const stylePaths = getImportStatements(uri.fsPath, doc.getText());
     const res: Location[] = [];
 
-    stylePaths.forEach((stylePath) => {
+    const resolveStyles = (stylePath: string, data: Record<string, [number, number][]>) => {
       const styleUri = Uri.URI.file(stylePath);
       const styleDoc = getTextDocument(styleUri.toString());
       if (!styleDoc) {
         return;
       }
-      const data = cssModules.classNames.get(stylePath);
-      const ranges = data?.[word];
+      const ranges = data[word];
       if (ranges) {
         ranges.forEach((range) => {
           const start = styleDoc.positionAt(range[0]);
@@ -297,7 +347,25 @@ connection.onDefinition((params) => {
           }
         });
       }
+    };
+
+    // locale style
+    stylePaths.forEach((stylePath) => {
+      const data = cssModules.classNames.get(stylePath);
+      if (!data) {
+        return;
+      }
+      resolveStyles(stylePath, data);
     });
+
+    // global style
+    for (const stylePath of cssModules.globalClassNames.keys()) {
+      const data = cssModules.globalClassNames.get(stylePath);
+      if (!data) {
+        continue;
+      }
+      resolveStyles(stylePath, data);
+    }
 
     return res;
   }
