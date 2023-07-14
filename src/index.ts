@@ -138,26 +138,8 @@ connection.onCompletion((textDocumentPosition: TextDocumentPositionParams): Comp
     return [];
   }
 
-  const stylePaths: string[] = [];
   const filePath = uri.fsPath;
-  const lines = doc.getText().split('\n');
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const m = line.match(cssImportStatement);
-    if (!m || !m[2]) {
-      continue;
-    }
-    const importStr = m[2];
-    const fp = join(dirname(filePath), importStr);
-    if (existsSync(fp)) {
-      stylePaths.push(fp);
-    }
-  }
-
-  if (!stylePaths.length) {
-    return [];
-  }
+  const stylePaths = getImportStatements(filePath, doc.getText());
 
   const res = stylePaths.reduce<CompletionItem[]>((acc, stylePath) => {
     const modules = cssModules.classNames.get(stylePath);
@@ -260,7 +242,7 @@ connection.onHover((params) => {
     const stylePaths = getImportStatements(uri.fsPath, doc.getText());
     const values: string[] = [];
 
-    const resolveHover = (stylePath, data: Record<string, [number, number][]>) => {
+    const resolveHover = (stylePath: string, data: Record<string, [number, number][]>) => {
       const styleUri = Uri.URI.file(stylePath);
       const styleDoc = getTextDocument(styleUri.toString());
       if (!styleDoc) {
